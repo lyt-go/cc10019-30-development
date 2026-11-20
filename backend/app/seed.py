@@ -1,7 +1,18 @@
 """示例数据：每个模块给几条不同状态的记录，数据之间存在真实业务关联。"""
 from __future__ import annotations
 
+import hashlib
 from typing import Any
+
+
+def _delivery_checksum(member_ids: list[str]) -> str:
+    """交付名单校验和：与 services/crowd_delivery.delivery_checksum 保持同一算法。"""
+    return hashlib.sha256("|".join(sorted(member_ids)).encode("utf-8")).hexdigest()[:16]
+
+
+# 预置交付文件的成员名单：CD-001 与 CD-002 有 40 人交集（U00041~U00080）
+_CD001_MEMBERS = [f"U{i:05d}" for i in range(1, 81)]
+_CD002_MEMBERS = [f"U{i:05d}" for i in range(41, 121)]
 
 SEED_ROWS: dict[str, list[dict[str, Any]]] = {
     # ========== 属性字典 ==========
@@ -561,6 +572,7 @@ SEED_ROWS: dict[str, list[dict[str, Any]]] = {
             "refresh_freq": "daily",
             "output_set": "crowd_high_value_active",
             "version": "v1.0",
+            "compute_version": 1,
         },
         {
             "id": 2,
@@ -578,6 +590,7 @@ SEED_ROWS: dict[str, list[dict[str, Any]]] = {
             "refresh_freq": "hourly",
             "output_set": "crowd_new_non_active",
             "version": "v1.0",
+            "compute_version": 1,
         },
         {
             "id": 3,
@@ -594,6 +607,46 @@ SEED_ROWS: dict[str, list[dict[str, Any]]] = {
             "refresh_freq": "daily",
             "output_set": "crowd_churn_warning",
             "version": "v1.0",
+            "compute_version": 0,
+        },
+    ],
+    # ========== 人群交付 ==========
+    "crowd_delivery": [
+        {
+            "id": 1,
+            "status": "已签收",
+            "pending": False,
+            "abnormal": False,
+            "delivery_id": "CD-001",
+            "condition_id": "CS-001",
+            "condition_name": "高价值活跃用户",
+            "compute_version": 1,
+            "member_count": len(_CD001_MEMBERS),
+            "source_matched_count": len(_CD001_MEMBERS),
+            "member_ids": _CD001_MEMBERS,
+            "checksum": _delivery_checksum(_CD001_MEMBERS),
+            "output_set": "crowd_high_value_active",
+            "logic_expr": "TAG-001 AND TAG-003",
+            "exported_at": "2026-11-15T09:30:00",
+            "confirmed_at": "2026-11-15T10:05:00",
+        },
+        {
+            "id": 2,
+            "status": "待签收",
+            "pending": True,
+            "abnormal": False,
+            "delivery_id": "CD-002",
+            "condition_id": "CS-002",
+            "condition_name": "新用户且未高活跃",
+            "compute_version": 1,
+            "member_count": len(_CD002_MEMBERS),
+            "source_matched_count": len(_CD002_MEMBERS),
+            "member_ids": _CD002_MEMBERS,
+            "checksum": _delivery_checksum(_CD002_MEMBERS),
+            "output_set": "crowd_new_non_active",
+            "logic_expr": "TAG-002 AND NOT TAG-001",
+            "exported_at": "2026-11-15T11:20:00",
+            "confirmed_at": "",
         },
     ],
     # ========== 交集分析 ==========
@@ -606,6 +659,8 @@ SEED_ROWS: dict[str, list[dict[str, Any]]] = {
             "task_id": "OA-001",
             "crowd_a": "CS-001",
             "crowd_b": "CS-002",
+            "delivery_a": "CD-001",
+            "delivery_b": "CD-002",
             "intersect_mode": "intersect",
             "analysis_dims": ["ATTR-001", "ATTR-005"],
             "output_metrics": ["count", "rate"],

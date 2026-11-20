@@ -5,6 +5,7 @@ const EventTrack = () => import('@/views/event_track/index.vue')
 const TagDefine = () => import('@/views/tag_define/index.vue')
 const TagCompute = () => import('@/views/tag_compute/index.vue')
 const CrowdSelect = () => import('@/views/crowd_select/index.vue')
+const CrowdDelivery = () => import('@/views/crowd_delivery/index.vue')
 const BehaviorPath = () => import('@/views/behavior_path/index.vue')
 const RetentionCalc = () => import('@/views/retention_calc/index.vue')
 const UserSegment = () => import('@/views/user_segment/index.vue')
@@ -28,6 +29,7 @@ const router = createRouter({
     { path: '/tag_define', name: 'tag_define', component: TagDefine },
     { path: '/tag_compute', name: 'tag_compute', component: TagCompute },
     { path: '/crowd_select', name: 'crowd_select', component: CrowdSelect },
+    { path: '/crowd_delivery', name: 'crowd_delivery', component: CrowdDelivery },
     { path: '/behavior_path', name: 'behavior_path', component: BehaviorPath },
     { path: '/retention_calc', name: 'retention_calc', component: RetentionCalc },
     { path: '/user_segment', name: 'user_segment', component: UserSegment },

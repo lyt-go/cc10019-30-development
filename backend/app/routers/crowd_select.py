@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.schemas import ActionPayload, ActionResult
+from app.schemas import ActionPayload, ActionResult, CrowdRunPayload
 from app.services.crowd_select import select_crowd, get_crowd_result
 from app.store import store, query_filters
 
@@ -32,9 +32,12 @@ def detail(entry_id: int) -> dict[str, Any]:
 
 
 @router.post("/{condition_id}/run")
-def run(condition_id: str) -> ActionResult:
+def run(condition_id: str, payload: CrowdRunPayload | None = None) -> ActionResult:
     try:
-        result = select_crowd(condition_id)
+        result = select_crowd(
+            condition_id,
+            exclude_users=payload.exclude_users if payload else None,
+        )
         return ActionResult(ok=True, message="Selected", entry=result)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

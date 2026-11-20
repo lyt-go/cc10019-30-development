@@ -251,6 +251,35 @@ class CrowdSelectEntry(BaseModel):
     refresh_freq: str = Field(..., description="刷新频率")
     output_set: str = Field(..., description="输出集合标识")
     version: str = Field(..., description="条件版本")
+    compute_version: int = Field(0, description="当前计算版本")
+
+
+class CrowdRunPayload(BaseModel):
+    """圈选执行参数：运营重算时可剔除指定会员。"""
+
+    exclude_users: list[str] = Field(default_factory=list, description="本次重算剔除的会员编号")
+
+
+# ========== 人群交付 ==========
+class CrowdDeliveryEntry(BaseModel):
+    """人群交付：一次导出的版本化名单，交付后内容不可变。"""
+
+    id: int
+    status: str = "待签收"
+    pending: bool = True
+    abnormal: bool = False
+    delivery_id: str = Field(..., description="交付编号")
+    condition_id: str = Field(..., description="圈选条件编号")
+    condition_name: str = Field("", description="圈选条件名称")
+    compute_version: int = Field(..., description="所用计算版本")
+    member_count: int = Field(0, description="名单数量")
+    source_matched_count: int = Field(0, description="导出时圈选全量命中数")
+    member_ids: list[str] = Field(default_factory=list, description="实际成员编号")
+    checksum: str = Field("", description="名单校验和")
+    output_set: str = Field("", description="输出集合标识")
+    logic_expr: str = Field("", description="逻辑表达式")
+    exported_at: str = Field("", description="导出时间")
+    confirmed_at: str = Field("", description="签收时间")
 
 
 # ========== 交集分析 ==========
@@ -264,6 +293,8 @@ class OverlapAnalysisEntry(BaseModel):
     task_id: str = Field(..., description="任务编号")
     crowd_a: str = Field(..., description="人群A条件编号")
     crowd_b: str = Field(..., description="人群B条件编号")
+    delivery_a: str = Field("", description="人群A交付编号")
+    delivery_b: str = Field("", description="人群B交付编号")
     intersect_mode: str = Field(..., description="交集方式：intersect/union/diff/a_only/b_only")
     analysis_dims: list[str] = Field(default_factory=list, description="分析维度")
     output_metrics: list[str] = Field(default_factory=list, description="输出指标")

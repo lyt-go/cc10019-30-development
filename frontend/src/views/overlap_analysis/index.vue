@@ -1,49 +1,119 @@
 <template>
   <section class="page" data-module="overlap_analysis">
     <header class="page-head">
-      <div><h2>交集分析</h2><p class="page-desc">维护多个人群集合的交集、差集与覆盖度分析任务，为交集分析提供可验证的数据工程流程。</p></div>
+      <div>
+        <h2>交集分析</h2>
+        <p class="page-desc">按交付编号读取人群交付文件的成员集合比较两个活动范围；交付文件不可变，重算圈选不会改变可核对的人数。</p>
+      </div>
+      <div class="page-actions">
+        <button class="btn" data-testid="reload" type="button" @click="reload">刷新列表</button>
+      </div>
     </header>
-    <div class="analysis-summary">
-      <article v-for="m in summaryMetrics" :key="m.label" class="analysis-card" data-testid="kpi-card">
-        <span style="font-size:12px;color:var(--muted)">{{ m.label }}</span>
-        <strong style="font-size:22px;display:block">{{ m.value }}</strong>
-        <span :class="m.trend > 0 ? 'trend-up' : 'trend-down'" style="font-size:12px">{{ m.trend > 0 ? '↑' : '↓' }}{{ Math.abs(m.trend) }}%</span>
-      </article>
-    </div>
-    <form class="analysis-form" @submit.prevent="runAnalysis">
-      <label v-for="field in paramFields" :key="field"><span>{{ field }}</span>
-        <select v-if="field.includes('方法')||field.includes('策略')||field.includes('粒度')" v-model="params[field]"><option v-for="o in options[field]" :key="o" :value="o">{{ o }}</option></select>
-        <input v-else v-model="params[field]" :placeholder="`请输入${field}`" />
-      </label>
-      <button class="btn primary" type="submit" data-testid="run-analysis">运行分析</button>
-    </form>
-    <div v-if="chartData.length" class="analysis-chart">
-      <div v-for="(bar, i) in chartData" :key="i" class="analysis-bar" :style="{ height: barHeight(bar.value) + 'px' }"><span>{{ bar.label }}</span></div>
-    </div>
-    <table class="data-table" v-if="results.length">
-      <thead><tr><th v-for="c in resultColumns" :key="c">{{ c }}</th></tr></thead>
-      <tbody><tr v-for="row in results" :key="row.id"><td v-for="c in resultColumns" :key="c">{{ row[c] ?? '—' }}</td></tr></tbody>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th v-for="column in columns" :key="column.key">{{ column.label }}</th>
+          <th>可执行动作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="row in rows" :key="String(row.id)" :data-testid="`row-${row.id}`" :data-status="String(row.status)">
+          <td v-for="column in columns" :key="column.key">{{ row[column.key] || '—' }}</td>
+          <td class="row-actions">
+            <button class="link" type="button" :data-testid="`run-${row.id}`" @click="runTask(row)">运行分析</button>
+          </td>
+        </tr>
+        <tr v-if="!rows.length">
+          <td :colspan="columns.length + 1" class="empty-state">暂无交集分析任务</td>
+        </tr>
+      </tbody>
     </table>
-    <p v-if="!results.length && !loading" style="text-align:center;color:var(--muted)">请配置参数后运行分析</p>
+
+    <div v-if="result" class="analysis-result" data-testid="overlap-result">
+      <h3>分析结果 {{ result.task_id }}（{{ result.intersect_mode }}）</h3>
+      <div class="stat-row">
+        <article class="stat-card">
+          <span class="stat-label">人群A人数</span>
+          <strong class="stat-value">{{ result.users_a_count }}</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">人群B人数</span>
+          <strong class="stat-value">{{ result.users_b_count }}</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">结果人数</span>
+          <strong class="stat-value">{{ result.result_count }}</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">覆盖率</span>
+          <strong class="stat-value">{{ (result.intersection_rate * 100).toFixed(1) }}%</strong>
+        </article>
+      </div>
+      <p v-if="result.source === 'delivery_file'" class="result-source">
+        数据来源：人群交付文件 {{ result.delivery_a }}（{{ result.crowd_a }} 计算版本 v{{ result.compute_version_a }}）
+        × {{ result.delivery_b }}（{{ result.crowd_b }} 计算版本 v{{ result.compute_version_b }}），名单以交付快照为准。
+      </p>
+      <p v-else class="result-source">数据来源：圈选实时结果（任务未指定交付编号，人数可能随重算变化）。</p>
+    </div>
+
+    <footer class="page-foot">
+      <span>共 {{ total }} 条交集任务</span>
+      <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
+    </footer>
   </section>
 </template>
+
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
+
 import { request } from '@/api/client'
-const ENDPOINT = '/api/overlap_analysis'
-const summaryMetrics = ref<{label:string;value:number;trend:number}[]>([])
-const results = ref<any[]>([]); const chartData = ref<{label:string;value:number}[]>([])
-const loading = ref(false)
-const params = ref<Record<string,string>>({})
-const paramFields = ["任务编号", "人群A", "人群B", "交集方式", "分析维度", "输出指标", "结果表名", "分析时间"].filter((f: string) => !['编号','名称','版本'].includes(f)).slice(0, 4)
-const options: Record<string,string[]> = { '统计粒度': ['按日','按周','按月'], '分组字段': ['全量','按类型','按区域'], '比较方法': ['环比','同比','绝对值'], '时间范围': ['最近7天','最近30天','最近90天'] }
-const resultColumns = computed(() => ["任务编号", "人群A", "人群B", "交集方式", "分析维度", "输出指标", "结果表名", "分析时间"].slice(0, 5))
-function barHeight(v: number) { const max = Math.max(...chartData.value.map(d => d.value), 1); return Math.max(10, (v / max) * 140) }
-async function fetchSummary() { try { const res = await request(`${ENDPOINT}/summary`); summaryMetrics.value = (await res.json()).metrics || [] } catch(e) {} }
-async function runAnalysis() {
-  loading.value = true
-  try { const res = await request(`${ENDPOINT}/run`, { method: 'POST', body: JSON.stringify({ values: params.value }) }); const data = await res.json(); results.value = data.items || []; chartData.value = (data.items || []).map((r: any) => ({ label: Object.values(r)[0] as string, value: Object.values(r).filter(v => typeof v === 'number')[0] as number || 0 })).slice(0, 6) } catch(e) { results.value = [] }
-  loading.value = false
+
+type Row = Record<string, any>
+
+const ENDPOINT = '/api/overlap-analysis'
+const columns = [
+  { key: 'task_id', label: '任务编号' },
+  { key: 'delivery_a', label: '人群A交付' },
+  { key: 'delivery_b', label: '人群B交付' },
+  { key: 'intersect_mode', label: '交集方式' },
+  { key: 'result_table', label: '结果表名' },
+  { key: 'status', label: '状态' },
+]
+
+const rows = ref<Row[]>([])
+const total = ref(0)
+const result = ref<Row | null>(null)
+const errorMessage = ref('')
+
+async function runTask(row: Row) {
+  errorMessage.value = ''
+  result.value = null
+  try {
+    const response = await request(`${ENDPOINT}/${row.task_id}/run`, { method: 'POST' })
+    const payload = await response.json()
+    if (!response.ok) throw new Error(payload.detail || '交集分析运行失败，请稍后重试')
+    result.value = payload.entry ?? null
+    await reload()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '交集分析运行失败'
+  }
 }
-onMounted(fetchSummary)
+
+async function reload() {
+  errorMessage.value = ''
+  try {
+    const response = await request(ENDPOINT)
+    if (!response.ok) {
+      throw new Error('交集任务列表读取失败')
+    }
+    const payload = await response.json()
+    rows.value = payload.items ?? []
+    total.value = payload.total ?? rows.value.length
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '交集任务列表读取失败'
+  }
+}
+
+onMounted(reload)
 </script>
